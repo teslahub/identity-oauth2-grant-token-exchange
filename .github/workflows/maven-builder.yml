@@ -18,12 +18,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+
       - name: Set up Adopt JDK 8
         uses: actions/setup-java@v2
         with:
           java-version: "8"
           distribution: "adopt"
+
       - name: Cache local Maven repository
         id: cache-maven-m2
         uses: actions/cache@v2
@@ -36,5 +38,20 @@ jobs:
             ${{ runner.os }}-maven-${{ env.cache-name }}-
             ${{ runner.os }}-maven-
             ${{ runner.os }}-
+
       - name: Build with Maven
         run: mvn clean install -U -B
+      
+      - name: Azure Login
+        if: ${{ success() }}
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload to blob storage
+        if: ${{ success() && runner.os == 'Windows' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+        env:
+          CONTAINER: github-actions
+          PREFIX: wso2-extensions/identity-oauth2-grant-token-exchange
+        run: |
+          az storage blob upload-batch --auth-mode login --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} --destination ${{ env.CONTAINER }} --destination-path ${{ env.PREFIX }} --source /home/runner/work/identity-oauth2-grant-token-exchange/identity-oauth2-grant-token-exchange/feature/org.wso2.carbon.identity.oauth2.grant.token.exchange.feature/target --pattern *.zip --overwrite --no-progress
